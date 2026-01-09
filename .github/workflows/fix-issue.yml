@@ -32,7 +32,7 @@ jobs:
 
         with:
 
-          node-version: 20
+          node-version: 24
 
           cache: npm
  
@@ -80,39 +80,23 @@ jobs:
       # - and either it's not a PR event, or it's a same-repo PR (not a fork)
 
       - name: If tests failed, ask Copilot to fix and open PR
-
         if: steps.tests.outcome == 'failure' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-
         uses: austenstone/copilot-cli@v2.0
-
         env:
-
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
-
           GH_TOKEN: ${{ github.token }}
-
         with:
-
-          copilot-token: ${{ secrets.COPILOT_TOKEN }}
-
-          repo-token: ${{ github.token }}
-
           prompt: |
-
             You are fixing failing CI tests in this repo.
- 
+
             Steps:
-
             1) Read ./test.log to identify the failing test(s) and root cause.
-
             2) Use playwright-test-healer.agent.md agent present in the repository to fix the issues.
-
             3) Run `npm test` to confirm green.
-
             4) Create a new branch, commit, and open a *draft PR* describing the fix.
- 
-            Notes:
 
+            Notes:
             - The test output is in ./test.log.
+
 
  
