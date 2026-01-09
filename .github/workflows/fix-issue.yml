@@ -105,7 +105,7 @@ jobs:
 
             1) Read ./test.log to identify the failing test(s) and root cause.
 
-            2) Use healer agent present in the repository to fix the issues.
+            2) Use playwright-test-healer.agent.md agent present in the repository to fix the issues.
 
             3) Run `npm test` to confirm green.
 
