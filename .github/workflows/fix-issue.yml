@@ -113,6 +113,6 @@ jobs:
  
             Notes:
 
-            - The test output is in ./test.log
+            - The test output is in ./test.log.
 
  
