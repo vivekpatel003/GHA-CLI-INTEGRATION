@@ -1,0 +1,118 @@
+name: Playwright CI (Copilot triage)
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  test_and_raise:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run Playwright tests (capture output + exit code)
+        id: run_tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          set +e
+          npm test 2>&1 | tee artifacts/playwright-output.txt
+          exit_code=${PIPESTATUS[0]}
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+          if [ "$exit_code" -ne 0 ]; then
+            echo "failed=true" >> $GITHUB_OUTPUT
+          else
+            echo "failed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Playwright HTML report (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-html-report
+          path: playwright-report
+          retention-days: 7
+
+      - name: Upload Playwright raw log (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-raw-log
+          path: artifacts/playwright-output.txt
+          retention-days: 7
+
+      - name: Tail Playwright log (last 200 lines)
+        if: steps.run_tests.outputs.failed == 'true'
+        id: tail_log
+        shell: bash
+        run: |
+          echo "text<<EOF" >> $GITHUB_OUTPUT
+          tail -n 200 artifacts/playwright-output.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Copilot issue for triage + fix
+        if: steps.run_tests.outputs.failed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const title = `Playwright CI failed (run ${context.runId}) – triage & fix`;
+            const body = [
+              `Playwright CI failed.`,
+              ``,
+              `**Run:** ${runUrl}`,
+              `**Repo:** ${context.repo.owner}/${context.repo.repo}`,
+              `**Branch:** ${context.ref}`,
+              `**Commit:** ${context.sha}`,
+              ``,
+              `Artifacts uploaded by CI:`,
+              `- **playwright-html-report** (HTML report)`,
+              `- **playwright-raw-log** (raw console output)`,
+              ``,
+              `---- Last 200 lines of output ----`,
+              `${{ steps.tail_log.outputs.text }}`,
+              ``,
+              `## What to do (Copilot coding agent)`,
+              `1) Analyze the failure and decide: **test issue** vs **site/product/env issue**.`,
+              `2) If it's a **test issue** (selectors/assertions/waits/snapshots), fix it and open a PR.`,
+              `   - After opening PR, add label: **fixed-by-pr**`,
+              `3) If it's a **site/product/env issue**, do NOT change tests.`,
+              `   - Add label: **needs-jira**`,
+              `   - Comment with a short summary + evidence from report/log.`,
+              ``,
+              `Acceptance criteria for PR path: \`npm test\` passes in CI.`,
+            ].join('\n');
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['ci-failure', 'playwright', 'copilot-triage'],
+              assignees: ['Copilot']
+            });
+
+            core.notice(`Created issue: ${issue.data.html_url}`);
+
+      - name: Fail job if tests failed (after creating issue)
+        if: steps.run_tests.outputs.failed == 'true'
+        run: exit 1
