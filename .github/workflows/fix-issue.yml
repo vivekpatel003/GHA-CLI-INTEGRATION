@@ -79,6 +79,22 @@ jobs:
 
       # - and either it's not a PR event, or it's a same-repo PR (not a fork)
 
+      - name: Debug token types
+        run: |
+          echo "Checking token types..."
+          echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
+          echo "COPILOT_TOKEN length: ${#COPILOT_TOKEN}"
+          
+          # Try to identify token type
+          if curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user | grep -q "login"; then
+            echo "GITHUB_TOKEN is a valid GitHub token"
+          else
+            echo "GITHUB_TOKEN may be an Actions token without user scope"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+
       - name: If tests failed, ask Copilot to fix and open PR
         if: steps.tests.outcome == 'failure' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: austenstone/copilot-cli@v2.0
@@ -86,6 +102,7 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
           GH_TOKEN: ${{ github.token }}
         with:
+          skip-gh-auth: true
           prompt: |
             You are fixing failing CI tests in this repo.
 
